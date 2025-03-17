@@ -19,6 +19,31 @@ const getNextTicketNumber = () => {
   return `HON-${year}-${sequence}`;
 };
 
+// Función para limpiar y formatear el texto
+const cleanResponse = (text: string): string => {
+  // Eliminar prefijos comunes
+  text = text.replace(/^(Assistant:|Asistente:|Bot:)/i, '').trim();
+  
+  // Eliminar cualquier prompt del sistema que se haya filtrado
+  if (text.includes('Eres un asistente')) {
+    text = text.split('\n').filter(line => !line.includes('Eres un asistente')).join('\n').trim();
+  }
+  
+  // Eliminar espacios múltiples
+  text = text.replace(/\s+/g, ' ');
+  
+  // Asegurar que el texto no esté vacío
+  if (!text) {
+    return "Lo siento, no pude generar una respuesta. ¿Podrías reformular tu pregunta?";
+  }
+  
+  return text;
+};
+
+interface HfResponse {
+  generated_text: string;
+}
+
 export const chatCompletion = async (messages: any[]) => {
   try {
     if (!apiKey) {
@@ -37,7 +62,7 @@ export const chatCompletion = async (messages: any[]) => {
     const isNewIssue = messages.length <= 2;
     const ticketPrefix = isNewIssue ? `[Ticket ${getNextTicketNumber()}]\n\n` : '';
     
-    // Prepare the prompt
+    // Prepare the prompt with context
     const prompt = `${AI_SYSTEM_PROMPT}\n\nConversation:\n${conversation}\n\nAssistant: ${ticketPrefix}`;
 
     console.log('Enviando solicitud a Hugging Face...');
@@ -49,38 +74,23 @@ export const chatCompletion = async (messages: any[]) => {
         inputs: prompt,
         parameters: {
           ...AI_PARAMETERS,
-          max_new_tokens: 1000,
-          temperature: 0.7,
+          max_new_tokens: 1500,
+          temperature: 0.8,
           return_full_text: false
         }
       }),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Timeout en la solicitud a la API')), 30000)
       )
-    ]);
+    ]) as HfResponse;
 
     console.log('Respuesta recibida de Hugging Face');
     
-    let reply = response.generated_text.trim();
+    let reply = cleanResponse(response.generated_text.trim());
     
-    // Clean up response
-    if (reply.startsWith('Assistant:')) {
-      reply = reply.substring('Assistant:'.length).trim();
-    }
-    
-    // Remove any system prompt that might have been echoed
-    if (reply.includes('Eres un asistente')) {
-      reply = reply.split('\n').filter(line => !line.includes('Eres un asistente')).join('\n').trim();
-    }
-
-    // Handle empty responses
-    if (!reply) {
-      return "Lo siento, no pude generar una respuesta. ¿Podrías reformular tu pregunta?";
-    }
-
     // Truncate if too long
-    if (reply.length > 1000) {
-      reply = reply.substring(0, 1000) + '...\n\n¿Deseas que continúe con más detalles?';
+    if (reply.length > 1500) {
+      reply = reply.substring(0, 1500) + '...\n\n¿Deseas que continúe con más detalles?';
     }
 
     return reply;

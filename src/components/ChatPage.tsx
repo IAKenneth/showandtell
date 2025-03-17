@@ -7,6 +7,22 @@ import { MessageSquare, Send, Menu, X, Settings, LogOut, Sun, Moon, Home, Users,
 import { TypeAnimation } from 'react-type-animation';
 import { chatCompletion } from '../lib/openai';
 import toast from 'react-hot-toast';
+import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomOneDark, atomOneLight } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import js from 'react-syntax-highlighter/dist/esm/languages/hljs/javascript';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/hljs/typescript';
+import python from 'react-syntax-highlighter/dist/esm/languages/hljs/python';
+import xml from 'react-syntax-highlighter/dist/esm/languages/hljs/xml';
+import css from 'react-syntax-highlighter/dist/esm/languages/hljs/css';
+import sql from 'react-syntax-highlighter/dist/esm/languages/hljs/sql';
+
+// Registrar lenguajes
+SyntaxHighlighter.registerLanguage('javascript', js);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('html', xml);
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('sql', sql);
 
 type MessageRole = 'user' | 'assistant';
 
@@ -14,6 +30,12 @@ interface Message {
   role: MessageRole;
   content: string;
   isTyping: boolean;
+  id?: string;
+}
+
+interface CodeBlock {
+  language: string;
+  code: string;
 }
 
 const INITIAL_MESSAGE = `[Sistema iniciando... 🤖]
@@ -41,7 +63,8 @@ function ChatPage() {
     { 
       role: 'assistant', 
       content: INITIAL_MESSAGE, 
-      isTyping: true 
+      isTyping: true,
+      id: 'welcome-message'
     }
   ]);
   const [input, setInput] = React.useState('');
@@ -63,6 +86,94 @@ function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
+  // Función para detectar y extraer bloques de código
+  const parseCodeBlocks = (text: string): (string | CodeBlock)[] => {
+    const parts: (string | CodeBlock)[] = [];
+    const codeBlockRegex = /\`\`\`(\w+)?\n([\s\S]*?)\`\`\`/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      // Añadir texto antes del bloque de código
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+
+      // Añadir el bloque de código
+      parts.push({
+        language: match[1] || 'text',
+        code: match[2].trim()
+      });
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Añadir el texto restante después del último bloque de código
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+
+    return parts;
+  };
+
+  // Función para renderizar el contenido del mensaje
+  const renderMessageContent = (message: Message) => {
+    if (!message.isTyping) {
+      const parts = parseCodeBlocks(message.content);
+      return (
+        <div className="prose dark:prose-invert max-w-none">
+          {parts.map((part, index) => {
+            if (typeof part === 'string') {
+              return <div key={index} className="whitespace-pre-wrap">{part}</div>;
+            } else {
+              return (
+                <div key={index} className="my-4 rounded-lg overflow-hidden">
+                  <div className="bg-gray-800 dark:bg-gray-900 px-4 py-2 text-xs text-gray-200">
+                    {part.language}
+                  </div>
+                  <SyntaxHighlighter
+                    language={part.language}
+                    style={isDark ? atomOneDark : atomOneLight}
+                    customStyle={{
+                      margin: 0,
+                      padding: '1rem',
+                      fontSize: '0.875rem',
+                      lineHeight: '1.5',
+                      borderRadius: '0 0 0.5rem 0.5rem'
+                    }}
+                  >
+                    {part.code}
+                  </SyntaxHighlighter>
+                </div>
+              );
+            }
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="prose dark:prose-invert max-w-none">
+        <TypeAnimation
+          sequence={[message.content]}
+          wrapper="div"
+          cursor={true}
+          repeat={0}
+          speed={50}
+          className="whitespace-pre-wrap"
+          style={{ 
+            display: 'inline-block',
+            fontFamily: 'inherit',
+            fontSize: 'inherit',
+            lineHeight: 'inherit'
+          }}
+          preRenderFirstString={true}
+          omitDeletionAnimation={true}
+        />
+      </div>
+    );
+  };
+
   const handleSendMessage = async () => {
     if (!input.trim() || isProcessing) return;
 
@@ -72,8 +183,18 @@ function ChatPage() {
 
     const newMessages: Message[] = [
       ...messages,
-      { role: 'user', content: userMessage, isTyping: false },
-      { role: 'assistant', content: '', isTyping: true }
+      { 
+        role: 'user', 
+        content: userMessage, 
+        isTyping: false,
+        id: `user-${Date.now()}`
+      },
+      { 
+        role: 'assistant', 
+        content: '', 
+        isTyping: true,
+        id: `assistant-${Date.now()}`
+      }
     ];
     
     setMessages(newMessages.slice(0, -1));
@@ -93,7 +214,8 @@ function ChatPage() {
         {
           role: 'assistant',
           content: response || "Lo siento, hubo un error. Por favor, intenta nuevamente.",
-          isTyping: false
+          isTyping: true,
+          id: `assistant-${Date.now()}`
         }
       ];
 
@@ -115,7 +237,7 @@ function ChatPage() {
   };
 
   return (
-    <div className="h-screen flex bg-gray-100 dark:bg-gray-900">
+    <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
       <div className={`fixed inset-y-0 left-0 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-200 ease-in-out z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700`}>
         <div className="flex flex-col h-full">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -218,31 +340,21 @@ function ChatPage() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-4xl mx-auto space-y-4">
-            {messages.map((message, index) => (
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+            {messages.map((message) => (
               <div
-                key={index}
+                key={message.id}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg p-4 ${
+                  className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${
                     message.role === 'user'
                       ? 'bg-blue-600 text-white'
-                      : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700'
                   }`}
                 >
-                  {message.isTyping ? (
-                    <TypeAnimation
-                      sequence={[message.content || '...', 1000]}
-                      wrapper="div"
-                      cursor={true}
-                      repeat={message.content ? 1 : Infinity}
-                      speed={50}
-                    />
-                  ) : (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
-                  )}
+                  {renderMessageContent(message)}
                 </div>
               </div>
             ))}
@@ -261,12 +373,12 @@ function ChatPage() {
                 onKeyPress={handleKeyPress}
                 placeholder="Escribe tu mensaje..."
                 disabled={isProcessing}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 placeholder-gray-400 dark:placeholder-gray-500"
               />
               <button
                 onClick={handleSendMessage}
                 disabled={!input.trim() || isProcessing}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 <Send className="w-5 h-5" />
                 <span>{isProcessing ? 'Procesando...' : 'Enviar'}</span>
