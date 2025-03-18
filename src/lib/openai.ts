@@ -1,5 +1,6 @@
 import { HfInference } from '@huggingface/inference';
-import { AI_SYSTEM_PROMPT, AI_PARAMETERS } from '../config/ai-training';
+import { AI_SYSTEM_PROMPT } from '../training/system-prompt';
+import { DEFAULT_CONFIG } from '../training/config';
 
 // Verificar que la clave de API existe
 const apiKey = import.meta.env.VITE_HUGGINGFACE_API_KEY;
@@ -70,10 +71,10 @@ export const chatCompletion = async (messages: any[]) => {
     // Make API call with timeout
     const response = await Promise.race([
       hf.textGeneration({
-        model: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+        model: DEFAULT_CONFIG.model,
         inputs: prompt,
         parameters: {
-          ...AI_PARAMETERS,
+          ...DEFAULT_CONFIG.parameters,
           max_new_tokens: 1500,
           temperature: 0.8,
           return_full_text: false
