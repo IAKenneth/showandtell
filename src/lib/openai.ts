@@ -23,7 +23,7 @@ const getNextTicketNumber = () => {
 // Función para limpiar y formatear el texto
 const cleanResponse = (text: string): string => {
   // Eliminar prefijos comunes
-  text = text.replace(/^(Assistant:|Asistente:|Bot:)/i, '').trim();
+  text = text.replace(/^(Assistant:|Asistente:|Bot:|User:|Human:)/i, '').trim();
   
   // Eliminar cualquier prompt del sistema que se haya filtrado
   if (text.includes('Eres un asistente')) {
@@ -68,33 +68,51 @@ export const chatCompletion = async (messages: any[]) => {
 
     console.log('Enviando solicitud a Hugging Face...');
     
-    // Make API call with timeout
-    const response = await Promise.race([
-      hf.textGeneration({
-        model: DEFAULT_CONFIG.model,
-        inputs: prompt,
-        parameters: {
-          ...DEFAULT_CONFIG.parameters,
-          max_new_tokens: 1500,
-          temperature: 0.8,
-          return_full_text: false
-        }
-      }),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout en la solicitud a la API')), 30000)
-      )
-    ]) as HfResponse;
+    // Make API call with timeout and retry logic
+    let retries = 3;
+    let lastError = null;
 
-    console.log('Respuesta recibida de Hugging Face');
-    
-    let reply = cleanResponse(response.generated_text.trim());
-    
-    // Truncate if too long
-    if (reply.length > 1500) {
-      reply = reply.substring(0, 1500) + '...\n\n¿Deseas que continúe con más detalles?';
+    while (retries > 0) {
+      try {
+        const response = await Promise.race([
+          hf.textGeneration({
+            model: DEFAULT_CONFIG.model,
+            inputs: prompt,
+            parameters: {
+              ...DEFAULT_CONFIG.parameters,
+              max_new_tokens: 1000,
+              temperature: 0.7,
+              return_full_text: false,
+              stop: ["Human:", "Assistant:", "User:", "Bot:"]
+            }
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout en la solicitud a la API')), 30000)
+          )
+        ]) as HfResponse;
+
+        console.log('Respuesta recibida de Hugging Face');
+        
+        let reply = cleanResponse(response.generated_text.trim());
+        
+        // Truncate if too long
+        if (reply.length > 1000) {
+          reply = reply.substring(0, 1000) + '...\n\n¿Deseas que continúe con más detalles?';
+        }
+
+        return reply;
+      } catch (error: any) {
+        lastError = error;
+        retries--;
+        
+        if (retries > 0) {
+          console.log(`Intento fallido, reintentando... (${retries} intentos restantes)`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos antes de reintentar
+        }
+      }
     }
 
-    return reply;
+    throw lastError;
   } catch (error: any) {
     console.error('Error detallado en chat completion:', error);
     
@@ -117,6 +135,10 @@ export const chatCompletion = async (messages: any[]) => {
 
     if (error?.message?.includes('Failed to fetch') || error?.message?.includes('Network')) {
       return "📡 Error de conexión. Por favor, verifique su conexión a internet e intente nuevamente.";
+    }
+
+    if (error?.message?.includes('API key no configurada')) {
+      return "🔑 Error de configuración. Por favor, contacte al administrador del sistema.";
     }
     
     return "⚠️ Error en el sistema. Por favor, intente nuevamente en unos momentos.";

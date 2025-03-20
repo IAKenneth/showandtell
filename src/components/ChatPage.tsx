@@ -118,58 +118,58 @@ function ChatPage() {
 
   // Función para renderizar el contenido del mensaje
   const renderMessageContent = (message: Message) => {
-    if (!message.isTyping) {
-      const parts = parseCodeBlocks(message.content);
+    if (message.isTyping) {
       return (
         <div className="prose dark:prose-invert max-w-none">
-          {parts.map((part, index) => {
-            if (typeof part === 'string') {
-              return <div key={index} className="whitespace-pre-wrap">{part}</div>;
-            } else {
-              return (
-                <div key={index} className="my-4 rounded-lg overflow-hidden">
-                  <div className="bg-gray-800 dark:bg-gray-900 px-4 py-2 text-xs text-gray-200">
-                    {part.language}
-                  </div>
-                  <SyntaxHighlighter
-                    language={part.language}
-                    style={isDark ? atomOneDark : atomOneLight}
-                    customStyle={{
-                      margin: 0,
-                      padding: '1rem',
-                      fontSize: '0.875rem',
-                      lineHeight: '1.5',
-                      borderRadius: '0 0 0.5rem 0.5rem'
-                    }}
-                  >
-                    {part.code}
-                  </SyntaxHighlighter>
-                </div>
-              );
-            }
-          })}
+          <TypeAnimation
+            sequence={[message.content || "Escribiendo..."]}
+            wrapper="div"
+            cursor={true}
+            repeat={0}
+            speed={50}
+            className="whitespace-pre-wrap"
+            style={{ 
+              display: 'inline-block',
+              fontFamily: 'inherit',
+              fontSize: 'inherit',
+              lineHeight: 'inherit'
+            }}
+            preRenderFirstString={true}
+            omitDeletionAnimation={true}
+          />
         </div>
       );
     }
 
+    const parts = parseCodeBlocks(message.content);
     return (
       <div className="prose dark:prose-invert max-w-none">
-        <TypeAnimation
-          sequence={[message.content]}
-          wrapper="div"
-          cursor={true}
-          repeat={0}
-          speed={50}
-          className="whitespace-pre-wrap"
-          style={{ 
-            display: 'inline-block',
-            fontFamily: 'inherit',
-            fontSize: 'inherit',
-            lineHeight: 'inherit'
-          }}
-          preRenderFirstString={true}
-          omitDeletionAnimation={true}
-        />
+        {parts.map((part, index) => {
+          if (typeof part === 'string') {
+            return <div key={index} className="whitespace-pre-wrap">{part}</div>;
+          } else {
+            return (
+              <div key={index} className="my-4 rounded-lg overflow-hidden">
+                <div className="bg-gray-800 dark:bg-gray-900 px-4 py-2 text-xs text-gray-200">
+                  {part.language}
+                </div>
+                <SyntaxHighlighter
+                  language={part.language}
+                  style={isDark ? atomOneDark : atomOneLight}
+                  customStyle={{
+                    margin: 0,
+                    padding: '1rem',
+                    fontSize: '0.875rem',
+                    lineHeight: '1.5',
+                    borderRadius: '0 0 0.5rem 0.5rem'
+                  }}
+                >
+                  {part.code}
+                </SyntaxHighlighter>
+              </div>
+            );
+          }
+        })}
       </div>
     );
   };
@@ -191,13 +191,13 @@ function ChatPage() {
       },
       { 
         role: 'assistant', 
-        content: '', 
+        content: 'Escribiendo...', 
         isTyping: true,
         id: `assistant-${Date.now()}`
       }
     ];
     
-    setMessages(newMessages.slice(0, -1));
+    setMessages(newMessages);
 
     try {
       const response = await chatCompletion(
@@ -209,19 +209,36 @@ function ChatPage() {
           }))
       );
 
+      if (!response) {
+        throw new Error('No se recibió respuesta del servidor');
+      }
+
       const updatedMessages: Message[] = [
         ...newMessages.slice(0, -1),
         {
           role: 'assistant',
-          content: response || "Lo siento, hubo un error. Por favor, intenta nuevamente.",
-          isTyping: true,
+          content: response,
+          isTyping: false,
           id: `assistant-${Date.now()}`
         }
       ];
 
       setMessages(updatedMessages);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error:', error);
+      
+      // Actualizar el último mensaje con el error
+      const errorMessages: Message[] = [
+        ...newMessages.slice(0, -1),
+        {
+          role: 'assistant',
+          content: error.message || "Lo siento, hubo un error. Por favor, intenta nuevamente.",
+          isTyping: false,
+          id: `assistant-${Date.now()}`
+        }
+      ];
+      
+      setMessages(errorMessages);
       toast.error('Error al procesar el mensaje');
     } finally {
       setIsProcessing(false);

@@ -28,13 +28,13 @@ export const DEFAULT_CONFIG: AIConfig = {
   language: "Español (Honduras)",
   model: "mistralai/Mixtral-8x7B-Instruct-v0.1",
   parameters: {
-    temperature: 0.8,
-    top_p: 0.95,
-    repetition_penalty: 1.2,
-    top_k: 50,
+    temperature: 0.7,
+    top_p: 0.9,
+    repetition_penalty: 1.1,
+    top_k: 40,
     do_sample: true,
-    max_new_tokens: 1500,
-    stop: ["Human:", "Assistant:"],
+    max_new_tokens: 1000,
+    stop: ["Human:", "Assistant:", "User:", "Bot:"],
     return_full_text: false,
     use_cache: true
   }
